@@ -37,6 +37,7 @@ int lfs_getattr(const char *path, struct stat *stbuf) {
 			res = get_inode_from_path(log_system, path, node);
 			if (res) {
 				perror("lfs_getattr, get_inode_from_path");
+				printf("getattr: get inode from path returned %d\n", res);
 				res = -ENOENT;
 			} else {
 				if (node->is_dir) {
@@ -226,35 +227,36 @@ int lfs_mkdir(const char *path, mode_t mode) {
 	if (!node) {
 		res = -ENOMEM;
 	} else {
-		if(get_inode_from_path(log_system, path, node) == 0) {
+		if (get_inode_from_path(log_system, path, node) == 0) {
 			free(node);
 			printf("mkdir: dir exists\n");
 			return -EEXIST;
 		}
 		name = malloc(FILE_NAME_LENGTH_MAX);
-		if(!name) {
+		if (!name) {
 			res = -ENOMEM;
 		} else {
 			printf("mkdir: 1\n");
 			res = get_filename(path, name);
-			if(!res) {
+			if (!res) {
 				printf("mkdir: 2\n");
 				parent = malloc(INODE_SIZE);
-				if(!parent) {
+				if (!parent) {
 					res = -ENOMEM;
 				} else {
 					printf("mkdir: 3\n");
 					res = get_root_inode(log_system, parent);
-					if (!res){
+					if (!res) {
 						printf("mkdir: 4\n");
 						char* temp = malloc(strlen(path));
-						if(!temp) {
+						if (!temp) {
 							res = -ENOMEM;
 						} else {
 							printf("mkdir: 5\n");
 							strcpy(temp, path);
 							node = parent;
-							while((strcmp(temp, name) != 0) && (strcmp(temp+1, name) != 0) && !res) {
+							while ((strcmp(temp, name) != 0) && (strcmp(temp + 1, name) != 0)
+									&& !res) {
 								parent = node;
 								printf("mkdir: temp now = %s\n", temp);
 								res = traverse_path(log_system, temp, parent, node, temp);
@@ -268,31 +270,33 @@ int lfs_mkdir(const char *path, mode_t mode) {
 									res = -ENOMEM;
 								} else {
 									printf("mkdir: 7\n");
-									node->inode_number = log_system->number_of_inodes+INODE_NUMBERS_MIN;
+									node->inode_number = log_system->number_of_inodes
+											+ INODE_NUMBERS_MIN;
 									node->is_dir = 1;
 									memcpy(node->file_name, name, strlen(name));
 									node->number_of_blocks = 0;
 									printf("mkdir: 8\n");
 									node->number_of_children = 0;
+									node->file_size = strlen(name);
 									memset(node->block_placements, 0, BLOCKS_PR_INODE);
 									memset(node->blocks_changed, 0, BLOCKS_PR_INODE);
 									printf("mkdir: 9\n");
 									res = add_child_to_dir(log_system, parent, node);
+									log_system->number_of_inodes++;
+									printf("mkdir: 10\n");
 									free(node);
+									printf("mkdir: 11\n");
 								}
 							}
 							free(temp);
 						}
-
 					}
-					free(parent);
 				}
 			}
 			free(name);
 		}
-		free(node);
 	}
-	printf("mkdir: 10\n");
+	printf("mkdir: returning %d\n", res);
 	return res;
 }
 
@@ -528,7 +532,7 @@ int get_inode_from_path(struct file_system* lfs, const char *path,
 					res = get_root_inode(lfs, node);
 					if (!res) {
 						printf("5\n");
-						curr_path = malloc(FILE_NAME_LENGTH_MAX*INODES_PR_LOG);
+						curr_path = malloc(FILE_NAME_LENGTH_MAX * INODES_PR_LOG);
 						if (!curr_path) {
 							res = -ENOMEM;
 						} else {
@@ -539,7 +543,8 @@ int get_inode_from_path(struct file_system* lfs, const char *path,
 							res = get_root_inode(lfs, node);
 							printf("8\n");
 							while (!res && !found) {
-								if (strcmp(node->file_name, file_name) == 0) {
+								if ((strcmp(node->file_name, file_name) == 0)
+										|| (strcmp(node->file_name, file_name + 1))) {
 									found = 1;
 								} else {
 									res = traverse_path(lfs, curr_path, node, node, curr_path);
@@ -560,11 +565,12 @@ int get_inode_from_path(struct file_system* lfs, const char *path,
 			free(file_name);
 		}
 	}
+	printf("get_inode_from_path: returns %d\n", res);
 	return res;
 }
 
-int traverse_path(struct file_system* lfs, const char* path, struct inode* parent,
-		struct inode* file, char* new_path) {
+int traverse_path(struct file_system* lfs, const char* path,
+		struct inode* parent, struct inode* file, char* new_path) {
 	int i;
 	int res = 0;
 	int found = 0;
@@ -573,7 +579,7 @@ int traverse_path(struct file_system* lfs, const char* path, struct inode* paren
 	char* name = malloc(FILE_NAME_LENGTH_MAX);
 	printf("traverse_path: path = %s\n", path);
 
-	if(parent->number_of_children <= 0) {
+	if (parent->number_of_children <= 0) {
 		free(name);
 		return -ENOENT;
 	}
@@ -626,11 +632,11 @@ int get_filename(char* path, char* file_name) {
 
 	printf("get_filename: path = %s)\n", path);
 
-	max = strnlen(path, FILE_NAME_LENGTH_MAX*INODES_PR_LOG) -1;
+	max = strnlen(path, FILE_NAME_LENGTH_MAX * INODES_PR_LOG) - 1;
 	memset(file_name, 0, max);
-	for (i= max; i >= 0; i--) {
+	for (i = max; i >= 0; i--) {
 		c = path[i];
-		if(c == '/') {
+		if (c == '/') {
 			i++;
 			break;
 		}
@@ -732,7 +738,7 @@ int add_child_to_dir(struct file_system* lfs, struct inode* parent,
 					if (!block) {
 						res = -ENOMEM;
 					} else {
-						if(parent->number_of_children <= 0) {
+						if (parent->number_of_children <= 0) {
 							memset(block, 0, BLOCK_SIZE);
 						} else {
 							res = read_block(lfs, parent->block_placements[0], block);
@@ -752,6 +758,7 @@ int add_child_to_dir(struct file_system* lfs, struct inode* parent,
 			}
 		}
 	}
+	printf("add_child: returning %d\n", res);
 	return res;
 }
 
@@ -807,10 +814,14 @@ int node_trunc(struct file_system* lfs, struct inode* node, int length) {
 int buff_assure_space(struct file_system* lfs, int blocks_to_add) {
 	int first_free, res = 0;
 
+	printf("buff_assure_space: finding space for %d blocks\n", blocks_to_add);
+
 	first_free = buff_first_free(lfs);
 	if ((first_free + blocks_to_add) > BLOCKS_PR_SEGMENT) {
+		printf("buff_assure_space: buffer needs to be emptied\n");
 		res = log_write_buffer(lfs);
 	}
+	printf("buff_assure_space returning: %d\n", res);
 	return res;
 }
 
@@ -822,20 +833,21 @@ int buff_write_inode_with_changes(struct file_system* lfs,
 	int offset = BLOCKS_PR_SEGMENT;
 	char* inode_table;
 
-	printf("%s\n", "buff_write_inode_with_changes");
+	printf("buff_write_inode_with_changes: inode nr = %d\n",
+			inode_ptr->inode_number);
 
 	clock_gettime(CLOCK_REALTIME, &inode_ptr->last_modified);
 	clock_gettime(CLOCK_REALTIME, &inode_ptr->last_access);
 	for (i = 0; i < BLOCKS_PR_INODE; i++) {
 		blocks_needed += inode_ptr->blocks_changed[i];
-		//printf("blocks_needed: %d\n", blocks_needed);
 	}
+	printf("blocks_needed: %d\n", blocks_needed);
 	res = buff_assure_space(lfs, blocks_needed);
 	if (res) {
 		perror("buff_write_inode_with_changes, can't get buffer space");
 		return res;
 	}
-	//printf("%s\n", "buff_write_inode_with_changes: 1");
+	printf("%s\n", "buff_write_inode_with_changes: 1");
 	first_free = buff_first_free(lfs);
 
 	inode_table = malloc(BLOCK_SIZE);
@@ -843,50 +855,65 @@ int buff_write_inode_with_changes(struct file_system* lfs,
 		perror("buff_write, malloc");
 		res = -ENOMEM;
 	} else {
-		//printf("%s\n", "buff_write_inode_with_changes: 2");
+		printf("%s\n", "buff_write_inode_with_changes: 2");
 		res = read_inode_table(lfs, inode_table);
 		if (!res) {
-			//printf("%s\n", "buff_write_inode_with_changes: 3");
-			for (block_no = 0; block_no < BLOCKS_PR_INODE; block_no++) {
-				if ((inode_ptr->blocks_changed[block_no] == 1) && !res) {
+			if (inode_ptr->is_dir) {
+				if (inode_ptr->blocks_changed[0]) {
 					offset = block_start_in_segment(first_free);
-					block_address = offset + (lfs->next_segment * SEGMENT_SIZE);
 					res = copy_one_block(data, lfs->buffer, data_at, offset);
-					if (!res) {
-						//printf("%s\n", "buff_write_inode_with_changes: 4");
-						data_at += offset;
+					inode_ptr->block_placements[0] = SEGMENT_SIZE * lfs->next_segment
+							+ offset;
+					inode_ptr->blocks_changed[0] = 0;
+					first_free++;
+				}
+			} else {
+				int max = inode_ptr->number_of_blocks;
+				for (block_no = 0; block_no < max; block_no++) {
+					if ((inode_ptr->blocks_changed[block_no] == 1) && !res) {
+						offset = block_start_in_segment(first_free);
+						block_address = offset + (lfs->next_segment * SEGMENT_SIZE);
+						res = copy_one_block(data, lfs->buffer, data_at, offset);
+						if (!res) {
+							printf("%s\n", "buff_write_inode_with_changes: 4");
+							data_at += offset;
 
-						lfs->buffer_summary[first_free] = inode_ptr->inode_number;
-						first_free++;
+							lfs->buffer_summary[first_free] = inode_ptr->inode_number;
+							first_free++;
 
-						inode_ptr->block_placements[block_no] = block_address;
-						inode_ptr->blocks_changed[block_no] = 0;
+							inode_ptr->block_placements[block_no] = block_address;
+							inode_ptr->blocks_changed[block_no] = 0;
+						}
 					}
 				}
 			}
-			//printf("%s\n", "buff_write_inode_with_changes: 5");
+			printf("%s\n", "buff_write_inode_with_changes: 3");
+
+			printf("%s\n", "buff_write_inode_with_changes: 5");
 			/*All blocks done, the inode is up to date and ready to be written to buffer*/
 			offset = block_start_in_segment(first_free);
 			res = copy_one_block(&inode_ptr, lfs->buffer, 0, offset);
 			if (!res) {
-				//printf("%s\n", "buff_write_inode_with_changes: 6");
+				printf("%s\n", "buff_write_inode_with_changes: 6");
 				lfs->buffer_summary[first_free] = 2;
 				first_free++;
 
 				inode_table[inode_ptr->inode_number] = offset
 						+ (lfs->next_segment * SEGMENT_SIZE);
+				printf("inode table[inode_number]: %c\n",
+						inode_table + inode_ptr->inode_number);
 				offset += BLOCK_SIZE;
 
 				res = copy_one_block(inode_table, lfs->buffer, 0, offset);
 				if (!res) {
-					//printf("%s\n", "buff_write_inode_with_changes: 7");
+					printf("%s\n", "buff_write_inode_with_changes: 7");
 					lfs->buffer_summary[first_free] = 1;
 				}
 			}
 		}
 		free(inode_table);
 	}
-	//printf("%s\n", "buff_write_inode_with_changes: 8");
+	printf("%s\n", "buff_write_inode_with_changes: 8 end");
 	return res;
 }
 
