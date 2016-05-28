@@ -23,9 +23,11 @@
 #define INODES_PR_LOG 200
 #define CLEANING_THRESHOLD 30
 #define BLOCK_SIZE 4000
-#define INODE_NUMBERS_MIN 2
 #define BLOCKS_PR_INODE 10
 #define FILE_NAME_LENGTH_MAX 40
+#define BLOCK_TYPE_EMPTY 0
+#define BLOCK_TYPE_ITBL 1
+#define BLOCK_TYPE_INODE 2
 
 int lfs_getattr( const char *, struct stat * );
 int lfs_open( const char *, struct fuse_file_info * );
@@ -86,9 +88,9 @@ struct file_system* log_system;
 struct fuse_file_info* open_file;
 
 /*Derived magic numbers*/
-#define segment_size BLOCK_SIZE*BLOCKS_PR_SEGMENT
-#define inode_size BLOCK_SIZE
-#define first_segment_start = INODES_PR_LOG*inode_size
+#define SEGMENT_SIZE BLOCK_SIZE*BLOCKS_PR_SEGMENT
+#define INODE_SIZE BLOCK_SIZE
+#define INODE_NUMBERS_MIN BLOCK_TYPE_INODE+1
 
 int log_clean(struct file_system* lfs);
 int buff_write_inode_with_changes(struct file_system* lfs, struct inode* inode_ptr, char* data);
@@ -96,18 +98,18 @@ int copy_one_block(char* from, char* to, int from_start_index, int to_start_inde
 int read_block(struct file_system* lfs, char* read_into, int address);
 int log_write_buffer(struct file_system* lfs);
 int buff_assure_space(struct file_system* lfs, int blocks_to_add);
-int get_dir(struct file_system* lfs, const char* path, struct inode* parent, struct inode* file, char* new_path);
-int does_file_exist(struct file_system* lfs, const char* filename, struct inode* parent);
+int traverse_path(struct file_system* lfs, const char* path, struct inode* parent, struct inode* file, char* new_path);
 int read_inode(struct file_system* lfs, int inode_number, struct inode* inode_ptr);
 int read_inode_table(struct file_system* lfs, char* put_table_here);
 int get_root_inode(struct file_system* lfs, struct inode* root);
 int add_child_to_dir(struct file_system* lfs, struct inode* parent, struct inode* child);
 int node_trunc(struct file_system* lfs, struct inode* node, int length);
 int get_inode_from_path(struct file_system* lfs, const char *path, struct inode* inode);
-int get_filename(const char* path, char* file_name);
+int get_filename(char* path, char* file_name);
 int fill_block_with_zero(char* array, int start_index);
 int update_inode_table(struct file_system* lfs, int inode_number, int new_address);
 int buff_first_free(struct file_system* lfs);
 int block_start_in_segment(int block_no);
+int init_inode_table(struct file_system* lfs);
 
 #endif /* LFS_H_ */
