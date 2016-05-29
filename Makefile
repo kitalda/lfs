@@ -1,7 +1,7 @@
 GCC = gcc
 SOURCES = lfs.c
 OBJS := $(patsubst %.c,%.o,$(SOURCES))
-CFLAGS = -O2 -Wall -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=25
+CFLAGS = -O2 -Wall -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=25 -g
 
 .PHONY: lfs
 

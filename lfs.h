@@ -31,7 +31,7 @@
 
 int lfs_getattr(const char *, struct stat *);
 int lfs_open(const char *, struct fuse_file_info *);
-int lfs_read(const char *, char *, size_t, off_t, struct fuse_file_info *);
+ssize_t lfs_read(int fd, void *buf, size_t count);
 int lfs_readdir(const char *, void *, fuse_fill_dir_t, off_t,
 		struct fuse_file_info *);
 int lfs_release(const char *path, struct fuse_file_info *fi);
@@ -60,10 +60,13 @@ struct inode {
 	 * as the content of the first block.
 	 */
 	char file_name[FILE_NAME_LENGTH_MAX];
-	int number_of_blocks, file_size, number_of_children;
+	int number_of_blocks;
+	int file_size;
+	int number_of_children;
 	int block_placements[BLOCKS_PR_INODE];
 	int blocks_changed[BLOCKS_PR_INODE];
-	struct timespec last_access, last_modified;
+	struct timespec* last_access;
+	struct timespec* last_modified;
 };
 
 struct file_system {
@@ -88,7 +91,7 @@ struct fuse_file_info* open_file;
 int log_clean(struct file_system* lfs);
 int buff_write_inode_with_changes(struct file_system* lfs,
 		struct inode* inode_ptr, unsigned int* data);
-int copy_one_block(unsigned int* from, unsigned int* to,
+int copy_one_block(void* from, void* to,
 		unsigned int from_start_index, unsigned int to_start_index);
 int read_block(struct file_system* lfs, unsigned int* read_into, unsigned int address);
 int log_write_buffer(struct file_system* lfs);
@@ -104,7 +107,7 @@ int add_child_to_dir(struct file_system* lfs, struct inode* parent,
 int node_trunc(struct file_system* lfs, struct inode* node, unsigned int length);
 int get_inode_from_path(struct file_system* lfs, const char *path,
 		struct inode* inode);
-int get_filename(char* path, char* file_name);
+int get_filename(const char* path, char* file_name);
 int fill_block_with_zero(unsigned int* array, unsigned int start_index);
 int update_inode_table(struct file_system* lfs, int inode_number,
 		int new_address);
