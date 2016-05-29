@@ -80,7 +80,7 @@ struct file_system* log_system;
 struct fuse_file_info* open_file;
 
 /*Derived magic numbers*/
-#define SEGMENT_SIZE BLOCK_SIZE*BLOCKS_PR_SEGMENT
+#define SEGMENT_SIZE (BLOCK_SIZE*BLOCKS_PR_SEGMENT + BLOCKS_PR_SEGMENT)
 #define INODE_SIZE BLOCK_SIZE
 #define INODE_NUMBERS_MIN BLOCK_TYPE_INODE+1
 #define MAX_CHILDREN BLOCKS_PR_INODE
@@ -111,5 +111,6 @@ int update_inode_table(struct file_system* lfs, int inode_number,
 int buff_first_free(struct file_system* lfs);
 int block_start_in_segment(int block_no);
 int init_inode_table(struct file_system* lfs);
+int complete_address(struct file_system* lfs, unsigned int addr_in_buff);
 
 #endif /* LFS_H_ */
