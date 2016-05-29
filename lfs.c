@@ -131,7 +131,6 @@ int lfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 									filler(buf, node->file_name, stbuf, 0);
 									stbuf->st_ino = node->parent_inode_number;
 								}
-								filler(buf, "hello", NULL, 0);
 								free(stbuf);
 							}
 						}
@@ -254,28 +253,28 @@ int lfs_mkdir(const char *path, mode_t mode) {
 						} else {
 							printf("mkdir: 5\n");
 							strcpy(temp, path);
-							node = parent;
 							while ((strcmp(temp, name) != 0) && (strcmp(temp + 1, name) != 0)
 									&& !res) {
-								parent = node;
 								printf("mkdir: temp now = %s\n", temp);
 								res = traverse_path(log_system, temp, parent, node, temp);
+								if(!res) {
+									parent = node;
+								}
 							}
 							if (!res) {
 								printf("mkdir: 6\n");
-								parent = node;
 								free(node);
 								node = malloc(INODE_SIZE);
 								if (!node) {
 									res = -ENOMEM;
 								} else {
-									printf("mkdir: 7\n");
+									printf("mkdir: parent is %s\n", parent->file_name);
 									node->inode_number = log_system->number_of_inodes
 											+ INODE_NUMBERS_MIN;
 									node->is_dir = 1;
 									memcpy(node->file_name, name, strlen(name));
 									node->number_of_blocks = 0;
-									printf("mkdir: 8\n");
+									printf("mkdir: child is %s\n", node->file_name);
 									node->number_of_children = 0;
 									node->file_size = strlen(name);
 									memset(node->block_placements, 0, BLOCKS_PR_INODE);
@@ -283,9 +282,7 @@ int lfs_mkdir(const char *path, mode_t mode) {
 									printf("mkdir: 9\n");
 									res = add_child_to_dir(log_system, parent, node);
 									log_system->number_of_inodes++;
-									printf("mkdir: 10\n");
-									free(node);
-									printf("mkdir: 11\n");
+									printf("mkdir: parent has %d children\n", parent->number_of_children);
 								}
 							}
 							free(temp);
@@ -510,44 +507,46 @@ int get_inode_from_path(struct file_system* lfs, const char *path,
 	if (!inode) {
 		return -ENOMEM;
 	}
-	printf("1\n");
+	//printf("1\n");
 	if (strcmp(path, "/") == 0) {
 		res = get_root_inode(lfs, inode);
 	} else {
-		printf("2\n");
+		//printf("2\n");
 		file_name = malloc(FILE_NAME_LENGTH_MAX);
 		if (!file_name) {
 			res = -ENOMEM;
 		} else {
-			printf("3\n");
+			//printf("3\n");
 			res = get_filename(path, file_name);
 			if (!res) {
-				printf("get_inode_..: path = %s\n", path);
+				//printf("get_inode_..: path = %s\n", path);
 				printf("get_inode_from path: file_name = %s\n", file_name);
 				node = malloc(INODE_SIZE);
 				if (!node) {
 					res = -ENOMEM;
 				} else {
-					printf("4\n");
+					//printf("4\n");
 					res = get_root_inode(lfs, node);
 					if (!res) {
-						printf("5\n");
+						//printf("5\n");
 						curr_path = malloc(FILE_NAME_LENGTH_MAX * INODES_PR_LOG);
 						if (!curr_path) {
 							res = -ENOMEM;
 						} else {
-							printf("6\n");
+							//printf("6\n");
 							found = 0;
 							strcpy(curr_path, path);
-							printf("7\n");
+							//printf("7\n");
 							res = get_root_inode(lfs, node);
-							printf("8\n");
+							printf("get_inode_from_path: root inode has %d children\n", node->number_of_children);
 							while (!res && !found) {
-								if ((strcmp(node->file_name, file_name) == 0)
-										|| (strcmp(node->file_name, file_name + 1))) {
+								if (strcmp(node->file_name, file_name) == 0) {
 									found = 1;
 								} else {
 									res = traverse_path(lfs, curr_path, node, node, curr_path);
+									if(res == -ENOENT) {
+										printf("get_inode_from_path: no node with path: %s\n", path);
+									}
 								}
 							}
 							if (found) {
@@ -559,13 +558,13 @@ int get_inode_from_path(struct file_system* lfs, const char *path,
 							free(curr_path);
 						}
 					}
-					free(node);
+					//free(node);
 				}
 			}
 			free(file_name);
 		}
 	}
-	printf("get_inode_from_path: returns %d\n", res);
+	printf("get_inode_from_path: returns %d, inode number was: %d\n", res, node->inode_number);
 	return res;
 }
 
@@ -601,7 +600,7 @@ int traverse_path(struct file_system* lfs, const char* path,
 		return res;
 	}
 	i = 0;
-	while (!found && i < BLOCK_SIZE) {
+	while (!found && i < parent->number_of_children) {
 		res = read_inode(lfs, block[i], node);
 		if (res) {
 			free(block);
@@ -663,7 +662,7 @@ int read_inode(struct file_system* lfs, int inode_number,
 			//printf("%s\n", "read_inode: 1");
 			res = read_inode_table(lfs, block);
 			if (!res) {
-				//printf("%s\n", "read_inode: 2");
+				printf("inode table says address is: %d\n", block[inode_number]);
 				addr = block[inode_number];
 				//printf("read_inode: address = %d\n", addr);
 				res = read_block(lfs, block, addr);
@@ -678,7 +677,8 @@ int read_inode(struct file_system* lfs, int inode_number,
 	if (inode_ptr->inode_number == INODE_NUMBERS_MIN) {
 		inode_ptr->is_dir = 1;
 	}
-	//printf("read_inode, res: %d\n", res);
+	printf("read_inode: node is %s\n", inode_ptr->file_name);
+	printf("read_inode: returns %d\n", res);
 	return res;
 }
 
@@ -688,13 +688,17 @@ int read_inode(struct file_system* lfs, int inode_number,
  */
 int read_inode_table(struct file_system* lfs, char* put_table_here) {
 	int res, addr = 0;
+	int i;
 
 	printf("read_inode_table\n");
 	addr = (buff_first_free(lfs) - 1);
-	//printf("read_inode_table: address= %d\n", addr);
 	addr = block_start_in_segment(addr);
-	res = copy_one_block(lfs->buffer, put_table_here, addr, 0);
-	//printf("read_inode_table res= %d\n", res);
+	printf("read_inode_table: address= %d\n", addr);
+	strncpy(put_table_here, lfs->buffer + addr, BLOCK_SIZE);
+	//res = copy_one_block(lfs->buffer, put_table_here, addr, 0);
+	for(i = 0; i < lfs->number_of_inodes; i++) {
+		printf("table: inode nr %d is at %d\n", i+INODE_NUMBERS_MIN, put_table_here[i+INODE_NUMBERS_MIN]);
+	}
 	//printf("read_inode_table: table is = %p\n", put_table_here);
 	//printf("read_inode_table: table[3] is = %d\n", put_table_here[3]);
 	return res;
@@ -920,12 +924,14 @@ int buff_write_inode_with_changes(struct file_system* lfs,
 int buff_first_free(struct file_system* lfs) {
 	int i;
 
-	//printf("%s\n", "buff_first_free");
+	printf("%s\n", "buff_first_free");
 	for (i = 0; i < BLOCKS_PR_SEGMENT; i++) {
+		printf("buff_first_free: summary of %d is %d\n", i, lfs->buffer_summary[i]);
 		if (lfs->buffer_summary[i] == 0) {
 			break;
 		}
 	}
+	printf("buff_first_free: returning %d\n", i);
 	return i;
 }
 
@@ -1147,8 +1153,8 @@ int init_inode_table(struct file_system* lfs) {
 		root->parent_inode_number = root->inode_number;
 		root->is_dir = 1;
 		addr = BLOCKS_PR_SEGMENT;
-		//printf("addr = %d\n", addr);
-		strncpy((lfs->buffer + addr), &root, INODE_SIZE);
+		printf("init table: addr = %d\n", addr);
+		strncpy((lfs->buffer + addr), root, INODE_SIZE);
 		lfs->buffer_summary[0] = BLOCK_TYPE_INODE;
 		block = malloc(BLOCK_SIZE);
 		if (!block) {
@@ -1156,10 +1162,10 @@ int init_inode_table(struct file_system* lfs) {
 		} else {
 			block[root->inode_number] = addr;
 			addr += BLOCK_SIZE;
-			//strncpy((lfs->buffer + addr + BLOCK_SIZE), block, BLOCK_SIZE);
-			res = copy_one_block(block, lfs->buffer, 0, addr);
+			memcpy((lfs->buffer + addr), block, BLOCK_SIZE);
 			lfs->buffer_summary[1] = BLOCK_TYPE_ITBL;
 			lfs->number_of_inodes = 1;
+			printf("init_table: buffer + 4040 is: %d\n", lfs->buffer + 4040);
 			free(block);
 		}
 	}
